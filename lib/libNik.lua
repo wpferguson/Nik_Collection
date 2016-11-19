@@ -136,38 +136,34 @@ function libNik.nik_collection_hdr(image_table, plugin_data)
 
   dt.control.execute(nikStartCommand)
 
-  -- for each of the image, exported image pairs
-  --   move the exported image into the directory with the original  
-  --   then import the image into the database which will group it with the original
-  --   and then copy over any tags other than darktable tags
+  -- figure out what the save file name was
 
-  for image,exported_image in pairs(image_table) do
-
-    local myimage_name = image.path .. "/" .. df.get_filename(exported_image)
-
-    while df.check_if_file_exists(myimage_name) do
-      myimage_name = df.filename_increment(myimage_name)
+  local parts = du.split(img_list, " ")
+  local hdr_filename = df.get_basename(parts[1]) .. "_HDR" .. "." .. df.get_filetype(parts[1])
+  dt.print_error("hdr_filename is " .. hdr_filename)
+  local home = os.getenv("HOME")
+  local results = io.popen("find " .. home .. " -name " .. hdr_filename .. " -print")
+  for l in results:lines() do
+    results:close()
+    dt.print_error("l is " .. l)
+    -- import the resulting file
+    local collection_path = dp.extract_collection_path(image_table)
+    dt.print_error("collection_path is " .. collection_path)
+    hdr_filename = collection_path .. "/" .. hdr_filename
+    dt.print_error("hdr_filename is " .. hdr_filename)
+    while df.check_if_file_exists(hdr_filename) do
+      hdr_filename = df.filename_increment(hdr_filename)
       -- limit to 99 more exports of the original export
-      if string.match(df.get_basename(myimage_name), "_(d-)$") == "99" then 
+      if string.match(df.get_basename(hdr_filename), "_(d-)$") == "99" then 
         break 
       end
     end
-
-    dt.print_error("moving " .. exported_image .. " to " .. myimage_name)
-    result = df.file_move(exported_image, myimage_name)
-
-    dt.print_error("importing file")
-    local myimage = dt.database.import(myimage_name)
-
-    myimage:group_with(image.group_leader)
-
-    for _,tag in pairs(dt.tags.get_tags(image)) do 
-      if not (string.sub(tag.name,1,9) == "darktable") then
-        dt.print_error("attaching tag")
-        dt.tags.attach(tag,myimage)
-      end
-    end
+    df.file_move(l, hdr_filename)
+    dt.database.import(hdr_filename)
+    break
   end
+  -- get rid of the exported files
+  os.execute("rm " .. img_list)
 end
 
 return libNik
